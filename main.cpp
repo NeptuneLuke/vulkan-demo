@@ -141,11 +141,11 @@ private:
 
 		/* [START] Get the extensions and validation layers - Not optional! */
 
-		std::cout << "Getting validation layers... \n\n";
+		std::cout << "\t Getting validation layers... \n\n";
 		
 		// Validation layers
 		if (ENABLE_VALIDATION_LAYERS && !check_validation_layers_support()) {
-			throw std::runtime_error("Validation layers requested but not available! \n");
+			throw std::runtime_error("\t Validation layers requested but not available! \n");
 		}
 		
 		VkInstanceCreateInfo instance_create_info{};
@@ -166,16 +166,16 @@ private:
 		}
 
 		#ifdef _DEBUG
-			std::cout << "Available validation layers: " << VALIDATION_LAYERS.size() << ".\n";
-			std::cout << "Listing all validation layers: \n";
+			std::cout << "\t Available validation layers: " << VALIDATION_LAYERS.size() << ".\n";
+			std::cout << "\t Listing all validation layers: \n";
 			for (const auto& ext : VALIDATION_LAYERS) {
-				std::cout << ext << " \n";
+				std::cout << "\t\t " << ext << " \n";
 			}
 			std::cout << "\n";
 		#endif
 
 
-		std::cout << "Getting extensions... \n\n";
+		std::cout << "\t Getting extensions... \n\n";
 		
 		// {VULKAN} Get all available extensions for our system
 		uint32_t available_extensions_count = 0;
@@ -184,10 +184,10 @@ private:
 		vkEnumerateInstanceExtensionProperties(nullptr, &available_extensions_count, available_extensions.data());
 		
 		#ifdef _DEBUG
-			std::cout << "Available extensions: " << available_extensions_count << ".\n";
-			std::cout << "Listing all extensions: \n";
+			std::cout << "\t Available extensions: " << available_extensions_count << ".\n";
+			std::cout << "\t Listing all extensions: \n";
 			for (const auto& ext : available_extensions) {
-				std::cout << ext.extensionName << " | v." << ext.specVersion << " \n";
+				std::cout << "\t\t " << ext.extensionName << " | v." << ext.specVersion << " \n";
 			}
 			std::cout << "\n";
 		#endif
@@ -200,10 +200,10 @@ private:
 		instance_create_info.ppEnabledExtensionNames = glfw_extensions.data();
 
 		#ifdef _DEBUG
-			std::cout << "Extensions obtained by GLFW: " << glfw_extensions.size() << ".\n";
-			std::cout << "Listing all extensions: \n";
+			std::cout << "\t Extensions obtained by GLFW: " << glfw_extensions.size() << ".\n";
+			std::cout << "\t Listing all extensions: \n";
 			for (const auto& ext : glfw_extensions) {
-				std::cout << ext << " \n";
+				std::cout << "\t\t " << ext << " \n";
 			}
 			std::cout << "\n";
 		#endif
@@ -217,7 +217,7 @@ private:
 			throw std::runtime_error("Failed to create the Vulkan Instance! \n");
 		}
 
-		std::cout << "Vulkan Instance created. \n";
+		std::cout << "\n" << "Vulkan Instance created. \n\n";
 	}
 
 	bool check_validation_layers_support() {
@@ -266,6 +266,9 @@ private:
 	void select_physical_device() {
 		
 		// Listing physical devices
+		std::cout << "Selecting Vulkan Physical device... \n\n";
+		
+		// Enumerating all physical devices
 		uint32_t devices_count = 0;
 		vkEnumeratePhysicalDevices(vulkan_instance, &devices_count, nullptr);
 
@@ -273,8 +276,23 @@ private:
 			throw std::runtime_error("Failed to find GPUs with Vulkan support! \n");
 		}
 
+		// Getting all physical devices
 		std::vector<VkPhysicalDevice> devices(devices_count);
 		vkEnumeratePhysicalDevices(vulkan_instance, &devices_count, devices.data());
+
+		// Getting all physical devices info
+		VkPhysicalDeviceProperties device_properties;
+		VkPhysicalDeviceMemoryProperties device_memory;
+
+		#ifdef _DEBUG
+			std::cout << "\t Available Vulkan Physical devices: " << devices_count << ".\n";
+			std::cout << "\t Listing all physical devices: \n";
+			for (const auto& device : devices) {
+				vkGetPhysicalDeviceProperties(device, &device_properties);
+				std::cout << "\t\t " << device_properties.deviceName << " \n";
+			}
+			std::cout << "\n";
+		#endif
 
 		// Check if they are suitable for the operations we want to perform
 		for (const auto& device : devices) {
@@ -286,6 +304,63 @@ private:
 		if(vulkan_physical_device == VK_NULL_HANDLE) {
 			throw std::runtime_error("Failed to find a suitable GPU! \n");
 		}
+
+		vkGetPhysicalDeviceProperties(vulkan_physical_device, &device_properties);
+		vkGetPhysicalDeviceMemoryProperties(vulkan_physical_device, &device_memory);
+
+		#ifdef _DEBUG
+			std::cout << "\t Selected Physical device: \n";
+			std::cout << "\t\t Name: " << device_properties.deviceName << ". \n";
+			std::cout << "\t\t ID: " << device_properties.deviceID << ". \n";
+			std::cout << "\t\t Type: ";
+			switch (device_properties.deviceType) {
+				
+				default:
+
+				case VK_PHYSICAL_DEVICE_TYPE_OTHER:
+					std::cout << "Unknown." << " \n\n";
+					break;
+
+				case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+					std::cout << "Integrated." << " \n\n";
+					break;
+
+				case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+					std::cout << "Dedicated." << " \n\n";
+					break;
+
+				case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+					std::cout << "Virtual." << " \n\n";
+					break;
+
+				case VK_PHYSICAL_DEVICE_TYPE_CPU:
+					std::cout << "CPU." << " \n\n";
+					break;
+			}
+
+			std::cout << "\t\t Driver version: "
+				<< VK_API_VERSION_MAJOR(device_properties.driverVersion) << "."
+				<< VK_API_VERSION_MINOR(device_properties.driverVersion) << "."
+				<< VK_API_VERSION_PATCH(device_properties.driverVersion) << ". \n";
+			std::cout << "\t\t Vulkan API version: "
+				<< VK_API_VERSION_MAJOR(device_properties.apiVersion) << "."
+				<< VK_API_VERSION_MINOR(device_properties.apiVersion) << "."
+				<< VK_API_VERSION_PATCH(device_properties.apiVersion) << ". \n\n";
+			
+			for (uint32_t j=0; j < device_memory.memoryHeapCount; j++) {
+
+				float_t memory_size_gib = (((float_t)device_memory.memoryHeaps[j].size) / 1024.0f / 1024.0f / 1024.0f);
+				if (device_memory.memoryHeaps[j].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) {
+					std::cout << "\t\t Local GPU memory: " << memory_size_gib << " GiB." << " \n";
+				}
+				else {
+					std::cout << "\t\t Shared System memory: " << memory_size_gib << " GiB." << " \n";
+				}
+			}
+			std::cout << "\n";
+		#endif
+
+		std::cout << "Vulkan Physical device found. \n\n";
 	}
 
 	bool is_device_suitable(VkPhysicalDevice device) {
@@ -312,6 +387,8 @@ private:
 	QueueFamilyIndices find_queue_families(VkPhysicalDevice device) {
 		
 		// Assign index to queue families that could be found
+		std::cout << "Looking for Vulkan Queue Families... \n\n";
+
 		QueueFamilyIndices indices;
 		uint32_t queue_families_count = 0;
 		vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_families_count, nullptr);
@@ -333,6 +410,17 @@ private:
 
 			index++;
 		}
+
+		#ifdef _DEBUG
+			std::cout << "\t Available Vulkan Queue Families: " << queue_families_count << ".\n";
+			std::cout << "\t Listing all queue families: \n";
+			for (const auto& queue_family : queue_families) {
+				std::cout << "\t\t " << queue_family.queueFlags << " \n";
+			}
+			std::cout << "\n";
+		#endif
+
+		std::cout << "Vulkan Queue Families found. \n\n";
 
 		return indices;
 	}
@@ -373,7 +461,7 @@ private:
 		const VkDebugUtilsMessengerCallbackDataEXT* ptr_callback_data,
 		void* ptr_user_data) {
 		
-		std::cerr << "Validation layer: " << ptr_callback_data->pMessage << std::endl;
+		std::cerr << "\t Validation layer: " << ptr_callback_data->pMessage << std::endl;
 		
 		return VK_FALSE;
 	}
