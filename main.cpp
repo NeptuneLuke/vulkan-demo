@@ -25,12 +25,12 @@ VkResult create_debug_messenger(
 	VkInstance vk_instance,
 	const VkDebugUtilsMessengerCreateInfoEXT* ptr_create_info,
 	const VkAllocationCallbacks* ptr_allocator,
-	VkDebugUtilsMessengerEXT* ptr_debug_messenger) {
+	VkDebugUtilsMessengerEXT* ptr_vk_debug_messenger) {
 	
 	auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(vk_instance, "vkCreateDebugUtilsMessengerEXT");
 	
 	if (func != nullptr) {
-		return func(vk_instance, ptr_create_info, ptr_allocator, ptr_debug_messenger);
+		return func(vk_instance, ptr_create_info, ptr_allocator, ptr_vk_debug_messenger);
 	}
 	else {
 		return VK_ERROR_EXTENSION_NOT_PRESENT;
@@ -39,12 +39,12 @@ VkResult create_debug_messenger(
 
 void destroy_debug_messenger(
 	VkInstance vk_instance,
-	VkDebugUtilsMessengerEXT debug_messenger,
+	VkDebugUtilsMessengerEXT vk_debug_messenger,
 	const VkAllocationCallbacks* ptr_allocator) {
 	
 	auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(vk_instance, "vkDestroyDebugUtilsMessengerEXT");
 	if (func != nullptr) {
-		func(vk_instance, debug_messenger, ptr_allocator);
+		func(vk_instance, vk_debug_messenger, ptr_allocator);
 	}
 }
 /* ----------------------------------------------------------------- */
@@ -65,7 +65,9 @@ private:
 
 	/* ----------------------------------------------------------------- */
 	VkInstance vulkan_instance;
-	VkDebugUtilsMessengerEXT debug_messenger;
+	VkPhysicalDevice vulkan_physical_device = VK_NULL_HANDLE; // Implicitly destroyed when vulkan_instance is destroyed
+
+	VkDebugUtilsMessengerEXT vulkan_debug_messenger;
 
 	GLFWwindow* window;
 	/* ----------------------------------------------------------------- */
@@ -85,6 +87,7 @@ private:
 	void init_vulkan() {
 		create_vulkan_instance();
 		setup_debug_messenger();
+		select_physical_device();
 	}
 
 	void main_loop() {
@@ -99,7 +102,7 @@ private:
 	void cleanup() {
 		
 		if (ENABLE_VALIDATION_LAYERS) {
-			destroy_debug_messenger(vulkan_instance, debug_messenger, nullptr);
+			destroy_debug_messenger(vulkan_instance, vulkan_debug_messenger, nullptr);
 		}
 
 		vkDestroyInstance(vulkan_instance, nullptr);
@@ -132,7 +135,7 @@ private:
 		
 		// Validation layers
 		if (ENABLE_VALIDATION_LAYERS && !check_validation_layers_support()) {
-			throw std::runtime_error("Validation layers requested but not available. \n");
+			throw std::runtime_error("Validation layers requested but not available! \n");
 		}
 		
 		VkInstanceCreateInfo instance_create_info{};
@@ -158,7 +161,7 @@ private:
 			for (const auto& ext : VALIDATION_LAYERS) {
 				std::cout << ext << " \n";
 			}
-			std::cout << "\n\n";
+			std::cout << "\n";
 		#endif
 
 
@@ -201,7 +204,7 @@ private:
 		
 		// Check if the instance is properly created
 		if (result != VK_SUCCESS) {
-			throw std::runtime_error("Failed to create the Vulkan Instance!");
+			throw std::runtime_error("Failed to create the Vulkan Instance! \n");
 		}
 
 		std::cout << "Vulkan Instance created. \n";
@@ -250,6 +253,47 @@ private:
 		return extensions;
 	}
 
+	void select_physical_device() {
+		
+		// Listing physical devices
+		uint32_t devices_count = 0;
+		vkEnumeratePhysicalDevices(vulkan_instance, &devices_count, nullptr);
+
+		if (devices_count == 0) {
+			throw std::runtime_error("Failed to find GPUs with Vulkan support! \n");
+		}
+
+		std::vector<VkPhysicalDevice> devices(devices_count);
+		vkEnumeratePhysicalDevices(vulkan_instance, &devices_count, devices.data());
+
+		// Check if they are suitable for the operations we want to perform
+		for (const auto& device : devices) {
+			if (is_device_suitable(device)) {
+				vulkan_physical_device = device;
+			}
+		}
+
+		if(vulkan_physical_device == VK_NULL_HANDLE) {
+			throw std::runtime_error("Failed to find a suitable GPU! \n");
+		}
+	}
+
+	bool is_device_suitable(VkPhysicalDevice device) {
+		
+		VkPhysicalDeviceProperties device_properties;
+		VkPhysicalDeviceFeatures device_features;
+		vkGetPhysicalDeviceProperties(device, &device_properties);
+		vkGetPhysicalDeviceFeatures(device, &device_features);
+		
+		// Only dedicated graphic cards  that support geometry shaders are defined as suitable
+		return device_properties.deviceType == 
+			VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU 
+			&& device_features.geometryShader;
+	}
+	/* ----------------------------------------------------------------- */
+
+
+	/* ----------------------------------------------------------------- */
 	void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& create_info) {
 		
 		create_info = {};
@@ -272,8 +316,8 @@ private:
 		VkDebugUtilsMessengerCreateInfoEXT create_info;
 		populateDebugMessengerCreateInfo(create_info);
 
-		if (create_debug_messenger(vulkan_instance, &create_info, nullptr, &debug_messenger) != VK_SUCCESS) {
-			throw std::runtime_error("Failed to set up the Debug Messenger!");
+		if (create_debug_messenger(vulkan_instance, &create_info, nullptr, &vulkan_debug_messenger) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to set up the Debug Messenger! \n");
 		}
 	}
 
