@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <cstdlib> // EXIT_FAILURE | EXIT_SUCCESS
 #include <vector>
+#include <optional>
 
 
 /* ----------------------------------------------------------------- */
@@ -19,6 +20,15 @@ const std::vector<const char*> VALIDATION_LAYERS = { "VK_LAYER_KHRONOS_validatio
 #else
 	const bool ENABLE_VALIDATION_LAYERS = false;
 #endif
+
+struct QueueFamilyIndices {
+
+	std::optional<uint32_t> graphics_family;
+	
+	bool is_complete() {
+		return graphics_family.has_value();
+	}
+};
 
 
 VkResult create_debug_messenger(
@@ -280,6 +290,7 @@ private:
 
 	bool is_device_suitable(VkPhysicalDevice device) {
 		
+		/*
 		VkPhysicalDeviceProperties device_properties;
 		VkPhysicalDeviceFeatures device_features;
 		vkGetPhysicalDeviceProperties(device, &device_properties);
@@ -289,6 +300,41 @@ private:
 		return device_properties.deviceType == 
 			VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU 
 			&& device_features.geometryShader;
+		*/
+
+		// Select all suitable devices as devices that support VK_QUEUE_GRAPHICS_BIT
+		QueueFamilyIndices indices = find_queue_families(device);
+
+		return indices.is_complete();
+	}
+
+	// Find queue family indices to populate struct with
+	QueueFamilyIndices find_queue_families(VkPhysicalDevice device) {
+		
+		// Assign index to queue families that could be found
+		QueueFamilyIndices indices;
+		uint32_t queue_families_count = 0;
+		vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_families_count, nullptr);
+
+		std::vector<VkQueueFamilyProperties> queue_families(queue_families_count);
+		vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_families_count, queue_families.data());
+
+		// We need to find at least one queue family that supports VK_QUEUE_GRAPHICS_BIT
+		uint32_t index = 0;
+		for (const auto& queue_family : queue_families) {
+			
+			if (indices.is_complete()) {
+				break;
+			}
+
+			if (queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+				indices.graphics_family = index;
+			}
+
+			index++;
+		}
+
+		return indices;
 	}
 	/* ----------------------------------------------------------------- */
 
