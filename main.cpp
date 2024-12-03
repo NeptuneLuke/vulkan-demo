@@ -392,6 +392,8 @@ private:
     }
 
     void create_logical_device() {
+
+        std::cout << "Creating Vulkan Logical device... \n\n";
         
         // Specify the queues to be created. To be more specific,
         // we will set the number of queues we want for a single queue family.
@@ -450,6 +452,8 @@ private:
         // If the queue families are the same, then we only need to pass its index once.
         vkGetDeviceQueue(vulkan_logical_device, indices.graphics_family.value(), 0, &vulkan_graphics_queue);
         vkGetDeviceQueue(vulkan_logical_device, indices.present_family.value(), 0, &vulkan_present_queue);
+
+        std::cout << "Vulkan Logical device created. \n";
     }
 
     bool is_device_suitable(VkPhysicalDevice device) {
@@ -475,7 +479,7 @@ private:
     QueueFamilyIndices find_queue_families(VkPhysicalDevice device) {
         
         // Assign index to queue families that could be found
-        std::cout << "Looking for Vulkan Queue Families... \n\n";
+        std::cout << "\t Looking for Vulkan Queue Families... \n\n";
 
         QueueFamilyIndices family_indices;
 
@@ -491,7 +495,7 @@ private:
         // So we need to find a queue family that supports presenting to the surface created.
         // It is possible that queue families supporting drawing commands and the ones supporting
         // presentation do not overlap.
-        int index = 0;
+        uint32_t index = 0;
         for (const auto& queue_family : queue_families) {
             
             if (queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
@@ -513,15 +517,15 @@ private:
         }
 
         #ifdef _DEBUG
-            std::cout << "\t Available Vulkan Queue Families: " << queue_families_count << ".\n";
-            std::cout << "\t Listing all queue families: \n";
+            std::cout << "\t\t Available Vulkan Queue Families: " << queue_families_count << ".\n";
+            std::cout << "\t\t Listing all queue families: \n";
             for (const auto& queue_family : queue_families) {
-                std::cout << "\t\t " << queue_family.queueFlags << " \n";
+                std::cout << "\t\t\t " << queue_family.queueFlags << " \n";
             }
             std::cout << "\n";
         #endif
 
-        std::cout << "Vulkan Queue Families found. \n\n";
+        std::cout << "\t Vulkan Queue Families found. \n\n";
 
         return family_indices;
     }
