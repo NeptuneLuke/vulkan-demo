@@ -33,14 +33,14 @@ struct QueueFamilyIndices {
 
 VkResult create_debug_messenger(
 	VkInstance vk_instance,
-	const VkDebugUtilsMessengerCreateInfoEXT* ptr_create_info,
+	const VkDebugUtilsMessengerCreateInfoEXT* ptr_debug_messenger_create_info,
 	const VkAllocationCallbacks* ptr_allocator,
 	VkDebugUtilsMessengerEXT* ptr_vk_debug_messenger) {
 	
 	auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(vk_instance, "vkCreateDebugUtilsMessengerEXT");
 	
 	if (func != nullptr) {
-		return func(vk_instance, ptr_create_info, ptr_allocator, ptr_vk_debug_messenger);
+		return func(vk_instance, ptr_debug_messenger_create_info, ptr_allocator, ptr_vk_debug_messenger);
 	}
 	else {
 		return VK_ERROR_EXTENSION_NOT_PRESENT;
@@ -76,6 +76,11 @@ private:
 	/* ----------------------------------------------------------------- */
 	VkInstance vulkan_instance;
 	VkPhysicalDevice vulkan_physical_device = VK_NULL_HANDLE; // Implicitly destroyed when vulkan_instance is destroyed
+	VkDevice vulkan_logical_device;
+	
+	// Implicitly destroyed when vulkan_logical_device is destroyed.
+	// For now we will use only a graphics family queue.
+	VkQueue vulkan_queue;
 
 	VkDebugUtilsMessengerEXT vulkan_debug_messenger;
 
@@ -98,6 +103,7 @@ private:
 		create_vulkan_instance();
 		setup_debug_messenger();
 		select_physical_device();
+		create_logical_device();
 	}
 
 	void main_loop() {
@@ -111,6 +117,8 @@ private:
 
 	void cleanup() {
 		
+		vkDestroyDevice(vulkan_logical_device, nullptr);
+
 		if (ENABLE_VALIDATION_LAYERS) {
 			destroy_debug_messenger(vulkan_instance, vulkan_debug_messenger, nullptr);
 		}
@@ -396,7 +404,8 @@ private:
 		std::vector<VkQueueFamilyProperties> queue_families(queue_families_count);
 		vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_families_count, queue_families.data());
 
-		// We need to find at least one queue family that supports VK_QUEUE_GRAPHICS_BIT
+		// We need to find at least one queue family that supports VK_QUEUE_GRAPHICS_BIT.
+		// This means that for now we will only use one queue family, the Graphics queue.
 		uint32_t index = 0;
 		for (const auto& queue_family : queue_families) {
 			
@@ -424,6 +433,67 @@ private:
 
 		return indices;
 	}
+
+	void create_logical_device() {
+		
+		// Specify the queues to be created. To be more specific,
+		// we will set the number of queues we want for a single queue family.
+		// For now we are only interested in a queue with graphics capabilities.
+		QueueFamilyIndices indices = find_queue_families(vulkan_physical_device);
+
+		VkDeviceQueueCreateInfo queue_create_info{};
+		queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		queue_create_info.queueFamilyIndex = indices.graphics_family.value();
+		
+		// We don't really need more than one per family, because you can create all
+		// of the command buffers on multiple threads and then submit them all at once
+		// on the main thread with a single call.
+		queue_create_info.queueCount = 1;
+
+		// We can also assign properties to queues to directly managing the scheduling of
+		// command buffer execution. It is required even with one single queue.
+		float_t queue_priority = 1.0f;
+		queue_create_info.pQueuePriorities = &queue_priority;
+
+		// Specify the device features needed, that we actually already queried up for
+		// with vkGetPhysicalDeviceFeatures
+		VkPhysicalDeviceFeatures logical_device_features{}; // Right now we don't need anything special
+
+		// Filling the main structure
+		VkDeviceCreateInfo logical_device_create_info{};
+		logical_device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+		logical_device_create_info.queueCreateInfoCount = 1;
+		logical_device_create_info.pEnabledFeatures = &logical_device_features;
+
+		// We enable validation layers specific to the device for retrocompatibility purposes.
+		// Note that we have not set device specific extensions for now.
+		logical_device_create_info.enabledExtensionCount = 0;
+		if (ENABLE_VALIDATION_LAYERS) {
+			logical_device_create_info.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
+			logical_device_create_info.ppEnabledExtensionNames = VALIDATION_LAYERS.data();
+		}
+		else {
+			logical_device_create_info.enabledLayerCount = 0;
+		}
+
+		if (vkCreateDevice(
+			vulkan_physical_device,
+			&logical_device_create_info,
+			nullptr,
+			&vulkan_logical_device) != VK_SUCCESS) {
+			
+			throw std::runtime_error("Failed to create Vulkan Logical device! \n");
+		}
+
+		// Retrieve queue handles for each queue family.
+		// Because we are only creating a single queue from the Graphics family
+		// (which for now is the only family we requested), we will use index 0.
+		vkGetDeviceQueue(
+			vulkan_logical_device,
+			indices.graphics_family.value(),
+			0,
+			&vulkan_queue);
+	}
 	/* ----------------------------------------------------------------- */
 
 
@@ -447,10 +517,10 @@ private:
 
 		if (!ENABLE_VALIDATION_LAYERS) return;
 
-		VkDebugUtilsMessengerCreateInfoEXT create_info;
-		populateDebugMessengerCreateInfo(create_info);
+		VkDebugUtilsMessengerCreateInfoEXT debug_messenger_create_info;
+		populateDebugMessengerCreateInfo(debug_messenger_create_info);
 
-		if (create_debug_messenger(vulkan_instance, &create_info, nullptr, &vulkan_debug_messenger) != VK_SUCCESS) {
+		if (create_debug_messenger(vulkan_instance, &debug_messenger_create_info, nullptr, &vulkan_debug_messenger) != VK_SUCCESS) {
 			throw std::runtime_error("Failed to set up the Debug Messenger! \n");
 		}
 	}
