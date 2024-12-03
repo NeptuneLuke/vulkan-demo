@@ -1,5 +1,4 @@
-// #include <vulkan/vulkan.h>
-#define GLFW_INCLUDE_VULKAN
+#define GLFW_INCLUDE_VULKAN // implicitly #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 
 #include <iostream>
@@ -7,6 +6,9 @@
 #include <cstdlib> // EXIT_FAILURE | EXIT_SUCCESS
 #include <vector>
 #include <optional>
+#include <set>
+
+// #include <cstring> in some system may be required for strcmp()
 
 
 /* ----------------------------------------------------------------- */
@@ -24,9 +26,10 @@ const std::vector<const char*> VALIDATION_LAYERS = { "VK_LAYER_KHRONOS_validatio
 struct QueueFamilyIndices {
 
 	std::optional<uint32_t> graphics_family;
+	std::optional<uint32_t> present_family;
 	
 	bool is_complete() {
-		return graphics_family.has_value();
+		return graphics_family.has_value() && present_family.has_value();
 	}
 };
 
@@ -75,12 +78,14 @@ private:
 
 	/* ----------------------------------------------------------------- */
 	VkInstance vulkan_instance;
+	VkSurfaceKHR vulkan_surface;
+
 	VkPhysicalDevice vulkan_physical_device = VK_NULL_HANDLE; // Implicitly destroyed when vulkan_instance is destroyed
 	VkDevice vulkan_logical_device;
 	
 	// Implicitly destroyed when vulkan_logical_device is destroyed.
-	// For now we will use only a graphics family queue.
-	VkQueue vulkan_queue;
+	VkQueue vulkan_graphics_queue;
+	VkQueue vulkan_present_queue;
 
 	VkDebugUtilsMessengerEXT vulkan_debug_messenger;
 
@@ -102,6 +107,7 @@ private:
 	void init_vulkan() {
 		create_vulkan_instance();
 		setup_debug_messenger();
+		create_vulkan_surface();
 		select_physical_device();
 		create_logical_device();
 	}
@@ -122,6 +128,8 @@ private:
 		if (ENABLE_VALIDATION_LAYERS) {
 			destroy_debug_messenger(vulkan_instance, vulkan_debug_messenger, nullptr);
 		}
+
+		vkDestroySurfaceKHR(vulkan_instance, vulkan_surface, nullptr);
 
 		vkDestroyInstance(vulkan_instance, nullptr);
 
@@ -271,6 +279,42 @@ private:
 		return extensions;
 	}
 
+	void create_vulkan_surface() {
+		
+		// Another way to do it (native Vulkan platform)
+		// GLFW is used only to get the handle of Win32 window
+		/*
+		#define VK_USE_PLATFORM_WIN32_KHR
+		#define GLFW_INCLUDE_VULKAN
+		#include <GLFW/glfw3.h>
+		#define GLFW_EXPOSE_NATIVE_WIN32
+		#include <GLFW/glfw3native.h>
+
+		VkWin32SurfaceCreateInfoKHR win32_surface_create_info{};
+		win32_surface_create_info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+		win32_surface_create_info.hwnd = glfwGetWin32Window(window);
+		win32_surface_create_info.hinstance = GetModuleHandle(nullptr);
+
+		if (vkCreateWin32SurfaceKHR(
+			vulkan_instance,
+			&win32_surface_create_info,
+			nullptr,
+			&vulkan_surface) != VK_SUCCESS) {
+			
+			throw std::runtime_error("Failed to create Vulkan Surface (Win32)! \n");
+		}
+		*/
+
+		if (glfwCreateWindowSurface(
+			vulkan_instance,
+			window,
+			nullptr,
+			&vulkan_surface) != VK_SUCCESS) {
+			
+			throw std::runtime_error("Failed to create Vulkan Surface (Win32)! \n");
+		}
+	}
+
 	void select_physical_device() {
 		
 		// Listing physical devices
@@ -397,24 +441,39 @@ private:
 		// Assign index to queue families that could be found
 		std::cout << "Looking for Vulkan Queue Families... \n\n";
 
-		QueueFamilyIndices indices;
+		QueueFamilyIndices family_indices;
 		uint32_t queue_families_count = 0;
 		vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_families_count, nullptr);
 
 		std::vector<VkQueueFamilyProperties> queue_families(queue_families_count);
 		vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_families_count, queue_families.data());
 
-		// We need to find at least one queue family that supports VK_QUEUE_GRAPHICS_BIT.
-		// This means that for now we will only use one queue family, the Graphics queue.
+		// We need to find at least one queue family that supports
+		// both VK_QUEUE_GRAPHICS_BIT and present family.
+		// Not every device in the system necesseraly supports window system integration.
+		// So we need to find a queue family that supports presenting to the surface created.
+		// It is possible that queue families supporting drawing commands and the ones supporting
+		// presentation do not overlap.
 		uint32_t index = 0;
 		for (const auto& queue_family : queue_families) {
 			
-			if (indices.is_complete()) {
+			if (family_indices.is_complete()) {
 				break;
 			}
 
 			if (queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-				indices.graphics_family = index;
+				family_indices.graphics_family = index;
+			}
+
+			VkBool32 present_family_supported = false;
+			vkGetPhysicalDeviceSurfaceSupportKHR(
+				device,
+				index,
+				vulkan_surface,
+				&present_family_supported);
+
+			if (present_family_supported) {
+				family_indices.present_family = index;
 			}
 
 			index++;
@@ -431,39 +490,51 @@ private:
 
 		std::cout << "Vulkan Queue Families found. \n\n";
 
-		return indices;
+		return family_indices;
 	}
 
 	void create_logical_device() {
 		
 		// Specify the queues to be created. To be more specific,
 		// we will set the number of queues we want for a single queue family.
-		// For now we are only interested in a queue with graphics capabilities.
 		QueueFamilyIndices indices = find_queue_families(vulkan_physical_device);
 
-		VkDeviceQueueCreateInfo queue_create_info{};
-		queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-		queue_create_info.queueFamilyIndex = indices.graphics_family.value();
-		
+		// Now i can create a set of all unique queue families that are necessary
+		// for the required queues.
+		std::vector<VkDeviceQueueCreateInfo> vulkan_queues_create_info;
+		std::set<uint32_t> unique_queue_families = 
+		{ 
+			indices.graphics_family.value(),
+			indices.present_family.value() 
+		};
+
 		// We don't really need more than one per family, because you can create all
 		// of the command buffers on multiple threads and then submit them all at once
 		// on the main thread with a single call.
-		queue_create_info.queueCount = 1;
-
 		// We can also assign properties to queues to directly managing the scheduling of
 		// command buffer execution. It is required even with one single queue.
-		float_t queue_priority = 1.0f;
-		queue_create_info.pQueuePriorities = &queue_priority;
+		float queue_priority = 1.0f;
+		for (uint32_t queue_family_index : unique_queue_families) {
+			
+			VkDeviceQueueCreateInfo single_queue_create_info{};
+			single_queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+			single_queue_create_info.queueFamilyIndex = queue_family_index;
+			single_queue_create_info.queueCount = 1;
+			single_queue_create_info.pQueuePriorities = &queue_priority;
+
+			vulkan_queues_create_info.push_back(single_queue_create_info);
+		}
 
 		// Specify the device features needed, that we actually already queried up for
 		// with vkGetPhysicalDeviceFeatures
-		VkPhysicalDeviceFeatures logical_device_features{}; // Right now we don't need anything special
+		VkPhysicalDeviceFeatures device_features{}; // Right now we don't need anything special
 
 		// Filling the main structure
 		VkDeviceCreateInfo logical_device_create_info{};
 		logical_device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-		logical_device_create_info.queueCreateInfoCount = 1;
-		logical_device_create_info.pEnabledFeatures = &logical_device_features;
+		logical_device_create_info.queueCreateInfoCount = static_cast<uint32_t>(vulkan_queues_create_info.size());
+		logical_device_create_info.pQueueCreateInfos = vulkan_queues_create_info.data();
+		logical_device_create_info.pEnabledFeatures = &device_features;
 
 		// We enable validation layers specific to the device for retrocompatibility purposes.
 		// Note that we have not set device specific extensions for now.
@@ -486,13 +557,18 @@ private:
 		}
 
 		// Retrieve queue handles for each queue family.
-		// Because we are only creating a single queue from the Graphics family
-		// (which for now is the only family we requested), we will use index 0.
+		// If the queue families are the same, then we only need to pass its index once.
 		vkGetDeviceQueue(
 			vulkan_logical_device,
 			indices.graphics_family.value(),
 			0,
-			&vulkan_queue);
+			&vulkan_graphics_queue);
+
+		vkGetDeviceQueue(
+			vulkan_logical_device,
+			indices.present_family.value(),
+			0,
+			&vulkan_present_queue);
 	}
 	/* ----------------------------------------------------------------- */
 
