@@ -1,10 +1,12 @@
 #version 450
 
 layout(location = 0) out vec4 out_color;
+layout(location = 0) in vec3 fragment_color; // it doesn't need to be the same name of the vector in vertex shader
 
 void main() {
 
-	out_color = vec4(1.0, 0.0, 0.0, 1.0);
+	// out_color = vec4(1.0, 0.0, 0.0, 1.0); old red triangle
+	out_color = vec4(fragment_color, 1.0); // new gradient triangle
 }
 
 /*	
