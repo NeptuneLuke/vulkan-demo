@@ -102,11 +102,12 @@ private:
     VkQueue vulkan_present_queue;
 
     VkSwapchainKHR vulkan_swapchain;
-    std::vector<VkImage> swapchain_images; // implicitly destroyed when vulkan_swapchain is destroyed
-    
-    // Written just because will need it in the future.
-    VkFormat vulkan_swapchain_image_format; // implicitly destroyed when vulkan_swapchain is destroyed
-    VkExtent2D vulkan_swapchain_extent; // implicitly destroyed when vulkan_swapchain is destroyed
+
+    // Implicitly destroyed when vulkan_swapchain is destroyed
+    std::vector<VkImage> vulkan_swapchain_images;
+    std::vector<VkImageView> vulkan_swapchain_images_views;
+    VkFormat vulkan_swapchain_image_format;
+    VkExtent2D vulkan_swapchain_extent;
 
     VkDebugUtilsMessengerEXT debug_messenger;
 
@@ -129,11 +130,16 @@ private:
     void init_vulkan() {
 
         create_vulkan_instance();
+
         setup_debug_messenger();
+        
         create_vulkan_surface();
+        
         select_physical_device();
         create_vulkan_logical_device();
+        
         create_vulkan_swapchain();
+        create_swapchain_image_views();
     }
 
     void main_loop() {
@@ -146,6 +152,10 @@ private:
     }
 
     void cleanup() {
+
+        for (auto img_view : vulkan_swapchain_images_views) {
+            vkDestroyImageView(vulkan_logical_device, img_view, nullptr);
+        }
 
         vkDestroySwapchainKHR(vulkan_logical_device, vulkan_swapchain, nullptr);
 
@@ -741,8 +751,8 @@ private:
         // number of images in the swapchain, so the implementation is allowed to
         // create a swapchain with more images.
         vkGetSwapchainImagesKHR(vulkan_logical_device, vulkan_swapchain, &images_in_swapchain_count, nullptr);
-        swapchain_images.resize(images_in_swapchain_count);
-        vkGetSwapchainImagesKHR(vulkan_logical_device, vulkan_swapchain, &images_in_swapchain_count, swapchain_images.data());
+        vulkan_swapchain_images.resize(images_in_swapchain_count);
+        vkGetSwapchainImagesKHR(vulkan_logical_device, vulkan_swapchain, &images_in_swapchain_count, vulkan_swapchain_images.data());
 
         // Written just because will need it in the future.
         vulkan_swapchain_image_format = surface_format.format;
@@ -867,6 +877,54 @@ private:
 
             return actual_extent;
         }
+    }
+
+    void create_swapchain_image_views() {
+        
+        std::cout << "Creating Vulkan Image views for Vulkan Swapchain images... \n";
+
+        // Resize to fit all the image views we will create
+        vulkan_swapchain_images_views.resize(vulkan_swapchain_images.size());
+
+        // Create an image view for every image
+        for (size_t i = 0; i < vulkan_swapchain_images.size(); i++) {
+            
+            VkImageViewCreateInfo image_view_create_info{};
+            image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            image_view_create_info.image = vulkan_swapchain_images[i];
+
+            // How the image should be interpreted
+            image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            image_view_create_info.format = vulkan_swapchain_image_format;
+
+            // You can map color channels to swizzle them around.
+            // You can also use values between 0,1.
+            // We will stick to default mapping.
+            image_view_create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+            image_view_create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+            image_view_create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+            image_view_create_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        
+            // Set what the image's purpose is and which part of the image
+            // should be accessed. As we said, our images will be used as color targest
+            // without any mimpapping levels or multiple layers.
+            image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            image_view_create_info.subresourceRange.baseMipLevel = 0;
+            image_view_create_info.subresourceRange.levelCount = 1;
+            image_view_create_info.subresourceRange.baseArrayLayer = 0;
+            image_view_create_info.subresourceRange.layerCount = 1;
+
+            if (vkCreateImageView(
+                vulkan_logical_device,
+                &image_view_create_info,
+                nullptr,
+                &vulkan_swapchain_images_views[i]) != VK_SUCCESS) {
+            
+                throw std::runtime_error("Failed to create Vulkan Image views for the Vulkan Swapchain images! \n");
+            }
+        }
+
+        std::cout << "Vulkan Image views created. \n";
     }
 
     static VKAPI_ATTR VkBool32 VKAPI_CALL debug_CALLBACK_FUNC(
