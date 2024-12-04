@@ -952,6 +952,8 @@ private:
             std::cout << "Shader modules created. \n\n";
         }
 
+
+        std::cout << "Creating the shader stages... \n";
         // To actually use the shaders we will need to assign them to a specific
         // pipeline stage.
         VkPipelineShaderStageCreateInfo vert_shader_stage_info{};
@@ -969,10 +971,102 @@ private:
         VkPipelineShaderStageCreateInfo shader_stages[] = { 
             vert_shader_stage_info,
             frag_shader_stage_info };
+        std::cout << "Shader stages created.  \n\n";
+
+
+        // While most of the pipeline state needs to be baked into the pipeline static state, a
+        // limited amount of the state can actually be dynamic, changing it without recreating the
+        // pipeline at draw time. If we want to use dynamic state:
+        std::vector<VkDynamicState> dynamic_state;
+
+        VkPipelineDynamicStateCreateInfo dynamic_states_create_info{};
+        dynamic_states_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamic_states_create_info.dynamicStateCount = static_cast<uint32_t>(dynamic_state.size());
+        dynamic_states_create_info.pDynamicStates = dynamic_state.data();
+
+        // The VkPipelineVertexInputStateCreateInfo structure describes the format
+        // of the vertex data that will be passed to the vertex shader.
+        // Because we’re hard coding the vertex data directly in the vertex shader, we’ll
+        // fill in this structure to specify that there is no vertex data to load for now.
+        // The pVertexBindingDescriptions and pVertexAttributeDescriptions
+        // members point to an array of structs that describe the aforementioned details
+        // for loading vertex data.
+        VkPipelineVertexInputStateCreateInfo vertex_input_create_info{};
+        vertex_input_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vertex_input_create_info.vertexBindingDescriptionCount = 0;
+        vertex_input_create_info.pVertexBindingDescriptions = nullptr;
+        vertex_input_create_info.vertexAttributeDescriptionCount = 0;
+        vertex_input_create_info.pVertexAttributeDescriptions = nullptr;
+
+        // The VkPipelineInputAssemblyStateCreateInfo struct describes two things:
+        // what kind of geometry will be drawn from the vertices and if primitive restart
+        // should be enabled.
+        // Normally, the vertices are loaded from the vertex buffer by index in sequential
+        // order, but with an element buffer you can specify the indices to use yourself.
+        // This allows you to perform optimizations like reusing vertices.
+        // We intend to draw triangles throughout this tutorial, so we’ll stick to the 
+        // following data for the structure :
+        VkPipelineInputAssemblyStateCreateInfo input_assembly_create_info{};
+        input_assembly_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        input_assembly_create_info.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        input_assembly_create_info.primitiveRestartEnable = VK_FALSE;
+
+        // A viewport describes the region of the framebuffer that the output
+        // will be rendered to. This will almost always be (0, 0) to (width, height)
+        // and in this tutorial will also be the case.
+        // Remember that the size of the swapchain and its images may differ from the WIDTH
+        // and HEIGHT of the window. The swapchain images will be used as framebuffers later on,
+        // so we should stick to their size.
+        // The minDepth and maxDepth values specify the range of depth values to use
+        // the framebuffer.These values must be within the[0.0f, 1.0f] range, but
+        // minDepth may be higher than maxDepth.If you aren’t doing anything special,
+        // then you should stick to the standard values of 0.0f and 1.0f.
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = (float) vulkan_swapchain_extent.width;
+        viewport.height = (float) vulkan_swapchain_extent.height;
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+
+        // While viewports define the transformation from the image to the framebuffer,
+        // scissor rectangles define in which regions pixels will actually be stored.
+        // Any pixels outside the scissor rectangles will be discarded by the rasterizer.
+        // They function like a filter rather than a transformation.
+        // If we want to draw to the entire framebuffer we should specify a scissor
+        // rectangle that covers it entirely.
+        VkRect2D scissor{};
+        scissor.offset = {0, 0};
+        scissor.extent = vulkan_swapchain_extent;
+
+        // Most of the times viewport and scissor are set as dynamic state in the command buffer
+        // rather than as a static part of the pipeline.
+        dynamic_state = {
+           VK_DYNAMIC_STATE_VIEWPORT,
+           VK_DYNAMIC_STATE_SCISSOR
+        };
+
+        VkPipelineDynamicStateCreateInfo dynamic_state_create_info{};
+        dynamic_state_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamic_state_create_info.dynamicStateCount = static_cast<uint32_t>(dynamic_state.size());
+        dynamic_state_create_info.pDynamicStates = dynamic_state.data();
+
+        // Specify their count at pipeline creation time.
+        // With dynamic state, the actual viewport(s) and scissor rectangle(s) will be set up at draw time.
+        // Without dynamic state, the viewport and scissor rectangle need to be set in the
+        // pipeline using the VkPipelineViewportStateCreateInfo struct.This makes
+        // the viewport and scissor rectangle for this pipeline immutable.
+        VkPipelineViewportStateCreateInfo viewport_state_create_info{};
+        viewport_state_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewport_state_create_info.viewportCount = 1;
+        // viewport_state_create_info.pViewports = &viewport;
+        viewport_state_create_info.scissorCount = 1;
+        // viewport_state_create_info.pScissors = &scissor;
 
 
         // We can destroy the shader modules as soon as the pipeline
         // is finished.
+        std::cout << "Destroying shader stages... \n\n";
         vkDestroyShaderModule(vulkan_logical_device, vert_shader_module, nullptr);
         vkDestroyShaderModule(vulkan_logical_device, frag_shader_module, nullptr);
     }
