@@ -140,6 +140,8 @@ private:
         
         create_vulkan_swapchain();
         create_swapchain_image_views();
+
+        create_graphics_pipeline();
     }
 
     void main_loop() {
@@ -925,6 +927,11 @@ private:
         }
 
         std::cout << "Vulkan Image views created. \n";
+    }
+
+    void create_graphics_pipeline() {
+        
+
     }
 
     static VKAPI_ATTR VkBool32 VKAPI_CALL debug_CALLBACK_FUNC(
