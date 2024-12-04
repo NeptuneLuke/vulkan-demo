@@ -110,6 +110,8 @@ private:
     VkFormat vulkan_swapchain_image_format;
     VkExtent2D vulkan_swapchain_extent;
 
+    VkPipelineLayout vulkan_pipeline_layout;
+
     VkDebugUtilsMessengerEXT debug_messenger;
 
     GLFWwindow* window;
@@ -155,6 +157,9 @@ private:
     }
 
     void cleanup() {
+
+        std::cout << "Destroying Vulkan Pipeline... \n\n";
+        vkDestroyPipelineLayout(vulkan_logical_device, vulkan_pipeline_layout, nullptr);
 
         std::cout << "Destroying Vulkan Image views... \n\n";
         for (auto img_view : vulkan_swapchain_images_views) {
@@ -938,13 +943,15 @@ private:
 
     void create_graphics_pipeline() {
         
+        std::cout << "Creating the Vulkan Pipeline... \n\n";
+
         auto vert_shader_bytecode = read_file("vert.spv");
         auto frag_shader_bytecode = read_file("frag.spv");
 
-        std::cout << "Vert shader file size: " << vert_shader_bytecode.size() << " bytes. \n";
-        std::cout << "Frag shader file size: " << frag_shader_bytecode.size() << " bytes. \n\n";
+        std::cout << "\t Vert shader file size: " << vert_shader_bytecode.size() << " bytes. \n";
+        std::cout << "\t Frag shader file size: " << frag_shader_bytecode.size() << " bytes. \n\n";
 
-        std::cout << "Creating the shader modules... \n";
+        std::cout << "\t Creating the shader modules... \n";
         VkShaderModule vert_shader_module = create_shader_module(vert_shader_bytecode);
         VkShaderModule frag_shader_module = create_shader_module(frag_shader_bytecode);
         
@@ -955,11 +962,11 @@ private:
             throw std::runtime_error("Frag shader not created! \n");
         }
         else {
-            std::cout << "Shader modules created. \n\n";
+            std::cout << "\t Shader modules created. \n\n";
         }
 
 
-        std::cout << "Creating the shader stages... \n";
+        std::cout << "\t Creating the shader stages... \n";
         // To actually use the shaders we will need to assign them to a specific
         // pipeline stage.
         VkPipelineShaderStageCreateInfo vert_shader_stage_info{};
@@ -977,7 +984,7 @@ private:
         VkPipelineShaderStageCreateInfo shader_stages[] = { 
             vert_shader_stage_info,
             frag_shader_stage_info };
-        std::cout << "Shader stages created.  \n\n";
+        std::cout << "\t Shader stages created.  \n\n";
 
 
         // While most of the pipeline state needs to be baked into the pipeline static state, a
@@ -1069,6 +1076,78 @@ private:
         viewport_state_create_info.scissorCount = 1;
         // viewport_state_create_info.pScissors = &scissor;
 
+        std::cout << "\t Creating Vulkan Rasterizer... \n";
+        // The rasterizer takes the geometry that is shaped by the vertices from the
+        // vertex shader and turns it into fragments to be colored by the fragment shader.
+        VkPipelineRasterizationStateCreateInfo rasterizer_create_info{};
+        rasterizer_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rasterizer_create_info.depthClampEnable = VK_FALSE;
+
+        // Geometry passes through the rasterizer stage, basically disabling any output
+        // to the framebuffer.
+        rasterizer_create_info.rasterizerDiscardEnable = VK_FALSE;
+
+        // Determines how fragments are generated from geometry.
+        // Fill the area of the polygon with fragments.
+        rasterizer_create_info.polygonMode = VK_POLYGON_MODE_FILL;
+        rasterizer_create_info.lineWidth = 1.0f; // thickness of line in terms of number of fragments
+        rasterizer_create_info.cullMode = VK_CULL_MODE_BACK_BIT;
+
+        // Specifies the vertex order for faces to be considered front-facing
+        // and can be clockwise/counterclockwise.
+        rasterizer_create_info.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        rasterizer_create_info.depthBiasEnable = VK_FALSE;
+        std::cout << "\t Vulkan Rasterizer created. \n\n";
+
+
+        // Multisampling is one of the ways to perform anti-aliasing. It works by combining
+        // the fragment shader results of multiple polygons that rasterize to the same pixel.
+        // This mainly occurs around edges, which is also where the most noticeable aliasing
+        // artifacts occur.
+        // For now we will keep it disabled, and revisit it later.
+        VkPipelineMultisampleStateCreateInfo multisampling_create_info{};
+        multisampling_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        multisampling_create_info.sampleShadingEnable = VK_FALSE;
+        multisampling_create_info.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+        // After a fragment shader has returned a color, it needs to be combined with the color
+        // already present in the framebuffer.
+        // There are two types of structs to configure color blending.
+        // VkPipelineColorBlendAttachmentState contains the config per attached framebuffer
+        // VkPipelineColorBlendStateCreateInfo contains the global color blending settings
+        // We only have one framebuffer.
+        VkPipelineColorBlendAttachmentState color_blend_attachment{};
+        color_blend_attachment.colorWriteMask = 
+            VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
+            VK_COLOR_COMPONENT_A_BIT;
+        color_blend_attachment.blendEnable = VK_FALSE;
+        
+        // The second structure references the array of structures for all of the framebuffers
+        VkPipelineColorBlendStateCreateInfo color_blending{};
+        color_blending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        color_blending.logicOpEnable = VK_FALSE;
+        color_blending.attachmentCount = 1;
+        color_blending.pAttachments = &color_blend_attachment;
+
+        // You can use uniform values in shaders, which are globals similar to dynamic
+        // state variables that can be changed at drawing time to alter the behavior of
+        // your shaders without having to recreate them.
+        // These uniform values need to be specified during pipeline creation by creating a
+        // VkPipelineLayout object.Even though we won’t be using them until a future
+        // chapter, we are still required to create an empty pipeline layout.
+        VkPipelineLayoutCreateInfo pipeline_layout_create_info{};
+        pipeline_layout_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+
+        if (vkCreatePipelineLayout(
+            vulkan_logical_device,
+            &pipeline_layout_create_info,
+            nullptr,
+            &vulkan_pipeline_layout) != VK_SUCCESS) {
+
+            throw std::runtime_error("Failed to create Vulkan Pipeline! \n");
+        }
+       
+        std::cout << "Vulkan Pipeline created. \n\n";
 
         // We can destroy the shader modules as soon as the pipeline
         // is finished.
