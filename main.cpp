@@ -156,20 +156,26 @@ private:
 
     void cleanup() {
 
+        std::cout << "Destroying Vulkan Image views... \n\n";
         for (auto img_view : vulkan_swapchain_images_views) {
             vkDestroyImageView(vulkan_logical_device, img_view, nullptr);
         }
 
+        std::cout << "Destroying Vulkan Swapchain... \n\n";
         vkDestroySwapchainKHR(vulkan_logical_device, vulkan_swapchain, nullptr);
 
+        std::cout << "Destroying Vulkan Logical device... \n\n";
         vkDestroyDevice(vulkan_logical_device, nullptr);
 
         if (ENABLE_VALIDATION_LAYERS) {
+            std::cout << "Destroying Vulkan Debug messenger... \n\n";
             destroy_debug_messenger(vulkan_instance, debug_messenger, nullptr);
         }
 
+        std::cout << "Destroying Vulkan Surface (Win32)... \n\n";
         vkDestroySurfaceKHR(vulkan_instance, vulkan_surface, nullptr);
 
+        std::cout << "Destroying Vulkan Instance... \n\n";
         vkDestroyInstance(vulkan_instance, nullptr);
 
         glfwDestroyWindow(window);
