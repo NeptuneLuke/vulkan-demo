@@ -4,11 +4,13 @@
 #include <iostream>
 #include <stdexcept>
 #include <cstdlib> // EXIT_FAILURE | EXIT_SUCCESS
-#include <vector>
+#include <cstring> // strcmp
+#include <cstdint> // uint32_t
 #include <optional>
+#include <algorithm> // std::clamp
+#include <limits> // std::numeric_limits
+#include <vector>
 #include <set>
-
-// #include <cstring> in some system may be required for strcmp()
 
 
 /* ----------------------------------------------------------------- */
@@ -17,10 +19,13 @@ const uint32_t HEIGHT = 600;
 
 const std::vector<const char*> VALIDATION_LAYERS = { "VK_LAYER_KHRONOS_validation" };
 
+// to get all required extensions (for now the VK_KHR_swapchain)
+const std::vector<const char*> DEVICE_EXTENSIONS = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+
 #ifdef _DEBUG
-    const bool ENABLE_VALIDATION_LAYERS = true;
+const bool ENABLE_VALIDATION_LAYERS = true;
 #else
-    const bool ENABLE_VALIDATION_LAYERS = false;
+const bool ENABLE_VALIDATION_LAYERS = false;
 #endif
 
 struct QueueFamilyIndices {
@@ -31,6 +36,16 @@ struct QueueFamilyIndices {
     bool is_complete() {
         return graphics_family.has_value() && present_family.has_value();
     }
+};
+
+// Just checking if a swapchain is available is not sufficient, it may not be
+// compatible with our window surface. Also we need to query for some details about
+// the swapchain.
+struct SwapchainSupportDetails {
+
+    VkSurfaceCapabilitiesKHR capabilities;
+    std::vector<VkSurfaceFormatKHR> formats;
+    std::vector<VkPresentModeKHR> present_modes;
 };
 
 
@@ -65,7 +80,7 @@ void destroy_debug_messenger(
 class VulkanDemo {
 
 public:
-    
+
     void run() {
         init_window();
         init_vulkan();
@@ -85,6 +100,13 @@ private:
     // Implicitly destroyed when vulkan_logical_device is destroyed.
     VkQueue vulkan_graphics_queue;
     VkQueue vulkan_present_queue;
+
+    VkSwapchainKHR vulkan_swapchain;
+    std::vector<VkImage> swapchain_images; // implicitly destroyed when vulkan_swapchain is destroyed
+    
+    // Written just because will need it in the future.
+    VkFormat vulkan_swapchain_image_format; // implicitly destroyed when vulkan_swapchain is destroyed
+    VkExtent2D vulkan_swapchain_extent; // implicitly destroyed when vulkan_swapchain is destroyed
 
     VkDebugUtilsMessengerEXT debug_messenger;
 
@@ -110,7 +132,8 @@ private:
         setup_debug_messenger();
         create_vulkan_surface();
         select_physical_device();
-        create_logical_device();
+        create_vulkan_logical_device();
+        create_vulkan_swapchain();
     }
 
     void main_loop() {
@@ -123,7 +146,9 @@ private:
     }
 
     void cleanup() {
-        
+
+        vkDestroySwapchainKHR(vulkan_logical_device, vulkan_swapchain, nullptr);
+
         vkDestroyDevice(vulkan_logical_device, nullptr);
 
         if (ENABLE_VALIDATION_LAYERS) {
@@ -151,7 +176,7 @@ private:
         std::cout << "\t Getting validation layers... \n\n";
 
         // Check validation layers
-        if (ENABLE_VALIDATION_LAYERS && !check_validation_layer_support()) {
+        if (ENABLE_VALIDATION_LAYERS && !check_validation_layers_support()) {
             throw std::runtime_error("\t Validation layers requested but not available! \n");
         }
 
@@ -176,7 +201,7 @@ private:
 
         // Get debugger
         VkDebugUtilsMessengerCreateInfoEXT debug_messenger_create_info{};
-        
+
         // Get validation layers
         if (ENABLE_VALIDATION_LAYERS) {
             instance_create_info.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
@@ -227,22 +252,22 @@ private:
     }
 
     void populate_debug_messenger_create_info(VkDebugUtilsMessengerCreateInfoEXT& debug_messenger_create_info) {
-        
+
         debug_messenger_create_info = {};
         debug_messenger_create_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-        debug_messenger_create_info.messageSeverity = 
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | 
-            VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | 
+        debug_messenger_create_info.messageSeverity =
+            VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+            VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
             VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-        debug_messenger_create_info.messageType = 
-            VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | 
-            VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | 
+        debug_messenger_create_info.messageType =
+            VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+            VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
             VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
         debug_messenger_create_info.pfnUserCallback = debug_CALLBACK_FUNC;
     }
 
     void setup_debug_messenger() {
-        
+
         std::cout << "Creating Vulkan Debugger... \n";
 
         if (!ENABLE_VALIDATION_LAYERS) return;
@@ -343,27 +368,27 @@ private:
             std::cout << "\t\t Type: ";
             switch (device_properties.deviceType) {
 
-                default:
+            default:
 
-                case VK_PHYSICAL_DEVICE_TYPE_OTHER:
-                    std::cout << "Unknown." << " \n\n";
-                    break;
+            case VK_PHYSICAL_DEVICE_TYPE_OTHER:
+                std::cout << "Unknown." << " \n\n";
+                break;
 
-                case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
-                    std::cout << "Integrated." << " \n\n";
-                    break;
+            case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+                std::cout << "Integrated." << " \n\n";
+                break;
 
-                case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
-                    std::cout << "Dedicated." << " \n\n";
-                    break;
+            case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+                std::cout << "Dedicated." << " \n\n";
+                break;
 
-                case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
-                    std::cout << "Virtual." << " \n\n";
-                    break;
+            case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+                std::cout << "Virtual." << " \n\n";
+                break;
 
-                case VK_PHYSICAL_DEVICE_TYPE_CPU:
-                    std::cout << "CPU." << " \n\n";
-                    break;
+            case VK_PHYSICAL_DEVICE_TYPE_CPU:
+                std::cout << "CPU." << " \n\n";
+                break;
             }
 
             std::cout << "\t\t Driver version: "
@@ -391,10 +416,10 @@ private:
         std::cout << "Vulkan Physical device (GPU) found. \n\n";
     }
 
-    void create_logical_device() {
+    void create_vulkan_logical_device() {
 
         std::cout << "Creating Vulkan Logical device... \n\n";
-        
+
         // Specify the queues to be created. To be more specific,
         // we will set the number of queues we want for a single queue family.
         QueueFamilyIndices indices = find_queue_families(vulkan_physical_device);
@@ -411,7 +436,7 @@ private:
         // command buffer execution. It is required even with one single queue.
         float queue_priority = 1.0f;
         for (uint32_t queue_family_index : unique_queue_families) {
-            
+
             VkDeviceQueueCreateInfo queueCreateInfo{};
             queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
             queueCreateInfo.queueFamilyIndex = queue_family_index;
@@ -433,9 +458,10 @@ private:
         logical_device_create_info.pEnabledFeatures = &device_features;
 
         // We enable validation layers specific to the device for retrocompatibility purposes.
-        // Note that we have not set device specific extensions for now.
-        logical_device_create_info.enabledExtensionCount = 0;
-
+        // Note that now we have explicitly set the VK_KHR_swapchain extension in the function
+        // check_extensions_support().
+        logical_device_create_info.enabledExtensionCount = static_cast<uint32_t>(DEVICE_EXTENSIONS.size());
+        logical_device_create_info.ppEnabledExtensionNames = DEVICE_EXTENSIONS.data();
         if (ENABLE_VALIDATION_LAYERS) {
             logical_device_create_info.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
             logical_device_create_info.ppEnabledLayerNames = VALIDATION_LAYERS.data();
@@ -453,11 +479,11 @@ private:
         vkGetDeviceQueue(vulkan_logical_device, indices.graphics_family.value(), 0, &vulkan_graphics_queue);
         vkGetDeviceQueue(vulkan_logical_device, indices.present_family.value(), 0, &vulkan_present_queue);
 
-        std::cout << "Vulkan Logical device created. \n";
+        std::cout << "Vulkan Logical device created. \n\n";
     }
 
     bool is_device_suitable(VkPhysicalDevice device) {
-        
+
         /*
         VkPhysicalDeviceProperties device_properties;
         VkPhysicalDeviceFeatures device_features;
@@ -471,13 +497,29 @@ private:
         */
 
         // Select all suitable devices as devices that support VK_QUEUE_GRAPHICS_BIT
+        // and support Presentation (Present Queue Family)
         QueueFamilyIndices indices = find_queue_families(device);
 
-        return indices.is_complete();
+        // Get the extensions supported by the device (for now only Swapchain is required)
+        bool extensions_supported = check_extensions_support(device);
+
+        // Get the swapchain details
+        bool swapchain_adequate = false;
+        if (extensions_supported) {
+
+            // We query for swapchain support only after veryifing that
+            // the extension VK_KHR_swapchain is available for our device.
+            SwapchainSupportDetails swapchain_support = query_swapchain_support(device);
+            swapchain_adequate =
+                !swapchain_support.formats.empty() &&
+                !swapchain_support.present_modes.empty();
+        }
+
+        return indices.is_complete() && extensions_supported && swapchain_adequate;
     }
 
     QueueFamilyIndices find_queue_families(VkPhysicalDevice device) {
-        
+
         // Assign index to queue families that could be found
         std::cout << "\t Looking for Vulkan Queue Families... \n\n";
 
@@ -495,9 +537,9 @@ private:
         // So we need to find a queue family that supports presenting to the surface created.
         // It is possible that queue families supporting drawing commands and the ones supporting
         // presentation do not overlap.
-        uint32_t index = 0;
+        int index = 0;
         for (const auto& queue_family : queue_families) {
-            
+
             if (queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
                 family_indices.graphics_family = index;
             }
@@ -531,7 +573,7 @@ private:
     }
 
     std::vector<const char*> get_required_extensions() {
-        
+
         uint32_t glfw_extensions_count = 0;
         const char** glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extensions_count);
 
@@ -544,20 +586,22 @@ private:
         return extensions;
     }
 
-    bool check_validation_layer_support() {
-        
-        uint32_t layers_count;
+    bool check_validation_layers_support() {
+
+        // Just checking if the validation layers are available
+
+        uint32_t layers_count = 0;
         vkEnumerateInstanceLayerProperties(&layers_count, nullptr);
 
         std::vector<VkLayerProperties> available_layers(layers_count);
         vkEnumerateInstanceLayerProperties(&layers_count, available_layers.data());
 
         for (const char* layer_name : VALIDATION_LAYERS) {
-            
+
             bool layer_found = false;
 
             for (const auto& layer_properties : available_layers) {
-                
+
                 if (strcmp(layer_name, layer_properties.layerName) == 0) {
                     layer_found = true;
                     break;
@@ -572,12 +616,265 @@ private:
         return true;
     }
 
+    bool check_extensions_support(VkPhysicalDevice device) {
+
+        // Just checking if the extensions are available for our device
+
+        // Technically, the availability of a presentation queue
+        // implies that the swapchain extension (VK_KHR_SWAPCHAIN_EXTENSION_NAME)
+        // is supported. However it's still good to be explicit.
+
+        uint32_t extensions_count = 0;
+        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensions_count, nullptr);
+
+        std::vector<VkExtensionProperties> available_extensions(extensions_count);
+        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensions_count, available_extensions.data());
+
+        // Unconfirmed required extensions
+        std::set<std::string> required_extensions(DEVICE_EXTENSIONS.begin(), DEVICE_EXTENSIONS.end());
+
+        // We can also use a nested loop like in check_validation_layers_support.
+        for (const auto& ext : available_extensions) {
+            required_extensions.erase(ext.extensionName);
+        }
+
+        return required_extensions.empty();
+    }
+
+    void create_vulkan_swapchain() {
+
+        std::cout << "Creating Vulkan Swapchain... \n\n";
+
+        SwapchainSupportDetails swapchain_support = query_swapchain_support(vulkan_physical_device);
+
+        // Setting up swapchain properties
+        VkSurfaceFormatKHR surface_format = choose_swapchain_surface_format(swapchain_support.formats);
+        VkPresentModeKHR present_mode = choose_swapchain_present_mode(swapchain_support.present_modes);
+        VkExtent2D swap_extent = choose_swapchain_extent(swapchain_support.capabilities);
+
+        // Decide how many minimum images we want to have in the swapchain.
+        // Sticking to the minimum means that sometimes it may occur that we have to wait
+        // on the driver to complete internal operations before we can acquire
+        // another image to render to. It is therefore recommended to request
+        // at least one more image than the minimum.
+        uint32_t images_in_swapchain_count = swapchain_support.capabilities.minImageCount + 1;
+
+        // Make sure to not exceed the maximum number of images 
+        if (swapchain_support.capabilities.maxImageCount > 0 &&
+            images_in_swapchain_count > swapchain_support.capabilities.maxImageCount) {
+
+            images_in_swapchain_count = swapchain_support.capabilities.maxImageCount;
+        }
+
+        // Fill the Swapchain struct
+        VkSwapchainCreateInfoKHR swapchain_create_info{};
+        swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+        swapchain_create_info.surface = vulkan_surface;
+        swapchain_create_info.minImageCount = images_in_swapchain_count;
+        swapchain_create_info.imageFormat = surface_format.format;
+        swapchain_create_info.imageColorSpace = surface_format.colorSpace;
+        swapchain_create_info.imageExtent = swap_extent;
+
+        // The amount of layers each image consists of (always 1 unless developing stereoscopic 3D app)
+        swapchain_create_info.imageArrayLayers = 1;
+
+        // What kind of operation we will use the images in the swapchain for.
+        // We are going to render them directly, which means they are used as color attachment.
+        swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+        // Select which type of sharing mode the images in the swapchain will use
+        // with the queue families.
+        QueueFamilyIndices family_indices = find_queue_families(vulkan_physical_device);
+        uint32_t queue_family_indices[] = {
+            family_indices.graphics_family.value(),
+            family_indices.present_family.value()
+        };
+
+        // If the graphics and present queue are not the same queue family
+        if (family_indices.graphics_family != family_indices.present_family) {
+            swapchain_create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+            swapchain_create_info.queueFamilyIndexCount = 2; // family and present
+            swapchain_create_info.pQueueFamilyIndices = queue_family_indices;
+        }
+        else {
+            // If the graphics and presentation queue are the same queue family
+            // which in most hardware is the case, the we should stick to exclusive mode
+            swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+            swapchain_create_info.queueFamilyIndexCount = 0;
+            swapchain_create_info.pQueueFamilyIndices = nullptr;
+        }
+
+        // We can specify that a certain transform should be applied to images in the swapchain
+        // (if supported -> supportedTransform in capabilities), like a 90 degree clockwise rotation.
+        // If you do not want any transformation, simply specify the current one.
+        swapchain_create_info.preTransform = swapchain_support.capabilities.currentTransform;
+
+        // Specifies the if the alpha channel should be used for blending with other windows
+        // in the window system. Almost always you will want to ignore it and set it
+        // as the following.
+        swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+
+        swapchain_create_info.presentMode = present_mode;
+
+        // We don't care about color of pixels that are obscured
+        // (for example because another window is in front of them).
+        // Which results in better performances.
+        swapchain_create_info.clipped = VK_TRUE;
+
+        // Swapchain can become invalid or unoptimized ar runtime, 
+        // for example when the window is resized. In that case the swapchain
+        // must be recreated from scratch and a copy of the old one must be specified.
+        // For now we will assume to create only one swapchain.
+        swapchain_create_info.oldSwapchain = VK_NULL_HANDLE;
+
+        if (vkCreateSwapchainKHR(
+            vulkan_logical_device,
+            &swapchain_create_info,
+            nullptr,
+            &vulkan_swapchain) != VK_SUCCESS) {
+
+            throw std::runtime_error("Failed to create Vulkan Swapchain! \n");
+        }
+
+        // First query the final number of images, then resize and then call it again to
+        // retrieve the handles. This is done because we only specified the minimum
+        // number of images in the swapchain, so the implementation is allowed to
+        // create a swapchain with more images.
+        vkGetSwapchainImagesKHR(vulkan_logical_device, vulkan_swapchain, &images_in_swapchain_count, nullptr);
+        swapchain_images.resize(images_in_swapchain_count);
+        vkGetSwapchainImagesKHR(vulkan_logical_device, vulkan_swapchain, &images_in_swapchain_count, swapchain_images.data());
+
+        // Written just because will need it in the future.
+        vulkan_swapchain_image_format = surface_format.format;
+        vulkan_swapchain_extent = swap_extent;
+
+        std::cout << "Vulkan Swapchain created. \n\n";
+    }
+
+    SwapchainSupportDetails query_swapchain_support(VkPhysicalDevice device) {
+
+        SwapchainSupportDetails details;
+
+        // Get Surface details (capabilities)
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, vulkan_surface, &details.capabilities);
+
+        // Get formats details
+        uint32_t formats_count = 0;
+        vkGetPhysicalDeviceSurfaceFormatsKHR(device, vulkan_surface, &formats_count, nullptr);
+
+        if (formats_count != 0) {
+            details.formats.resize(formats_count);
+            vkGetPhysicalDeviceSurfaceFormatsKHR(device, vulkan_surface, &formats_count, details.formats.data());
+        }
+
+        // Get present modes details
+        uint32_t present_modes_count = 0;
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, vulkan_surface, &present_modes_count, nullptr);
+
+        if (present_modes_count != 0) {
+            details.present_modes.resize(present_modes_count);
+            vkGetPhysicalDeviceSurfacePresentModesKHR(device, vulkan_surface, &present_modes_count, details.present_modes.data());
+        }
+
+        return details;
+    }
+
+    VkSurfaceFormatKHR choose_swapchain_surface_format(const std::vector<VkSurfaceFormatKHR>& available_formats) {
+
+        // We are choosing the best possible swapchain surface format.
+        // The typical combination is:
+        // format = RGBA 8 bit (32 bits per pixel).
+        // color space = SRGB (more accurate perceived colors)
+        // SRGB is pretty much the color space standard for images and textures.
+
+        for (const auto& available_format : available_formats) {
+
+            // This is the best possible (if available) format.
+            if (available_format.format == VK_FORMAT_B8G8R8A8_SRGB &&
+                available_format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+
+                return available_format;
+            }
+        }
+
+        // If we don't get the best one we wanted, we could rank the available
+        // formats and choose the (second) best, but in most cases it's okay
+        // to just settle with the first specified format.
+        return available_formats[0];
+    }
+
+    VkPresentModeKHR choose_swapchain_present_mode(const std::vector<VkPresentModeKHR>& available_present_modes) {
+
+        // Since we are on a computer and not a mobile device, 
+        // the best present mode is probably VK_PRESENT_MODE_MAILBOX_KHR.
+        // Even though it may be possible that it's not available.
+        // The only present mode guaranteed to be available is
+        // VK_PRESENT_MODE_FIFO_KHR, so we need to query even for
+        // present modes.
+
+        for (const auto& available_present_mode : available_present_modes) {
+
+            if (available_present_mode == VK_PRESENT_MODE_MAILBOX_KHR) {
+
+                return available_present_mode;
+            }
+        }
+
+        // As we said, if VK_PRESENT_MODE_MAILBOX_KHR is not present
+        // just return the guaranteed one.
+        return VK_PRESENT_MODE_FIFO_KHR;
+    }
+
+    VkExtent2D choose_swapchain_extent(const VkSurfaceCapabilitiesKHR& capabilities) {
+
+        // The swap extent is the resolution of the swapchain images
+        // and it's almost always equal to the resolution of the window
+        // that we are drawing to (in pixels).
+        // The range of the possible resolutions is defined
+        // in the VkSurfaceCapabilitiesKHR struct.
+
+        if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+            return capabilities.currentExtent;
+        }
+        else {
+
+            // This is because GLFW uses two units: pixels and screen coordinates.
+            // But Vulkan works only with pixels, so the swapchain extent must be
+            // specified in pixels.
+            // We use glfwGetFramebufferSize() to query the resolution of the window
+            // in pixel before matching it against the min/max image extent.
+
+            int w, h;
+            glfwGetFramebufferSize(window, &w, &h);
+
+            VkExtent2D actual_extent = {
+                static_cast<uint32_t>(w),
+                static_cast<uint32_t>(h)
+            };
+
+            // Clamp to bound the values of width and height
+            // between the allowed min/max extents that are supported
+            // by the implementation.
+            actual_extent.width = std::clamp(
+                actual_extent.width,
+                capabilities.minImageExtent.width,
+                capabilities.maxImageExtent.width);
+
+            actual_extent.height = std::clamp(
+                actual_extent.height,
+                capabilities.minImageExtent.height,
+                capabilities.maxImageExtent.height);
+
+            return actual_extent;
+        }
+    }
+
     static VKAPI_ATTR VkBool32 VKAPI_CALL debug_CALLBACK_FUNC(
         VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
         VkDebugUtilsMessageTypeFlagsEXT message_type,
         const VkDebugUtilsMessengerCallbackDataEXT* ptr_callback_data,
         void* ptr_user_data) {
-        
+
         std::cerr << "\t Validation layer: " << ptr_callback_data->pMessage << std::endl;
 
         return VK_FALSE;
