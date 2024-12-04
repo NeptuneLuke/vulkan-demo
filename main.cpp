@@ -11,6 +11,7 @@
 #include <limits> // std::numeric_limits
 #include <vector>
 #include <set>
+#include <fstream>
 
 
 /* ----------------------------------------------------------------- */
@@ -926,12 +927,105 @@ private:
             }
         }
 
-        std::cout << "Vulkan Image views created. \n";
+        std::cout << "Vulkan Image views created. \n\n";
     }
 
     void create_graphics_pipeline() {
         
+        auto vert_shader_bytecode = read_file("vert.spv");
+        auto frag_shader_bytecode = read_file("frag.spv");
 
+        std::cout << "Vert shader file size: " << vert_shader_bytecode.size() << " bytes. \n";
+        std::cout << "Frag shader file size: " << frag_shader_bytecode.size() << " bytes. \n\n";
+
+        std::cout << "Creating the shader modules... \n";
+        VkShaderModule vert_shader_module = create_shader_module(vert_shader_bytecode);
+        VkShaderModule frag_shader_module = create_shader_module(frag_shader_bytecode);
+        
+        if (vert_shader_module == VK_NULL_HANDLE) {
+            throw std::runtime_error("Vert shader not created! \n");
+        }
+        else if (frag_shader_module == VK_NULL_HANDLE) {
+            throw std::runtime_error("Frag shader not created! \n");
+        }
+        else {
+            std::cout << "Shader modules created. \n\n";
+        }
+
+        // To actually use the shaders we will need to assign them to a specific
+        // pipeline stage.
+        VkPipelineShaderStageCreateInfo vert_shader_stage_info{};
+        vert_shader_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        vert_shader_stage_info.stage = VK_SHADER_STAGE_VERTEX_BIT;
+        vert_shader_stage_info.module = vert_shader_module;
+        vert_shader_stage_info.pName = "main";
+
+        VkPipelineShaderStageCreateInfo frag_shader_stage_info{};
+        frag_shader_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        frag_shader_stage_info.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        frag_shader_stage_info.module = frag_shader_module;
+        frag_shader_stage_info.pName = "main";
+        
+        VkPipelineShaderStageCreateInfo shader_stages[] = { 
+            vert_shader_stage_info,
+            frag_shader_stage_info };
+
+
+        // We can destroy the shader modules as soon as the pipeline
+        // is finished.
+        vkDestroyShaderModule(vulkan_logical_device, vert_shader_module, nullptr);
+        vkDestroyShaderModule(vulkan_logical_device, frag_shader_module, nullptr);
+    }
+
+    // Before we can pass the code to the pipeline,
+    // we have to wrap it in a VkShaderModule object.
+    VkShaderModule create_shader_module(const std::vector<char>& shader_code) {
+
+        VkShaderModuleCreateInfo shader_module_create_info{};
+        shader_module_create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        shader_module_create_info.codeSize = shader_code.size();
+        // The size of the shader bytecode (a char specified in bytes) is different from the bytecode pointer
+        // (a uint32_t) so we need to cast it with reinterpret_cast.
+        // Technically with a cast like this we should also need to ensure data satisfies the 
+        // alignment requirement of uint32_t, but the std::vector default allocator already ensures it.
+        shader_module_create_info.pCode = reinterpret_cast<const uint32_t*>(shader_code.data());
+
+        VkShaderModule shader_module;
+
+        if (vkCreateShaderModule(vulkan_logical_device, &shader_module_create_info, nullptr,
+            &shader_module) != VK_SUCCESS) {
+            
+            throw std::runtime_error("Failed to create the shader module! \n");
+        }
+
+        return shader_module;
+    }
+
+    static std::vector<char> read_file(const std::string& file_name) {
+        
+        // std::ios::ate = start reading at the end of the file
+        // std::ios::binary = read the file as a binary file (avoid text transformations)
+        // We start reading at the end of the file because so that we can
+        // determine the size of the file and allocate a buffer.
+        std::ifstream file(file_name, std::ios::ate | std::ios::binary);
+
+        const std::string error_file = "Failed to open file: " + file_name + " \n";
+        if (!file.is_open()) {
+            throw std::runtime_error(error_file);
+        }
+
+        // Now i get the size of the file
+        size_t file_size = (size_t)file.tellg();
+        std::vector<char> buffer(file_size);
+
+        // Now i go back to the top of the file and start reading
+        // all of the bytes at once.
+        file.seekg(0);
+        file.read(buffer.data(), file_size);
+
+        file.close();
+
+        return buffer;
     }
 
     static VKAPI_ATTR VkBool32 VKAPI_CALL debug_CALLBACK_FUNC(
