@@ -110,6 +110,7 @@ private:
     VkFormat vulkan_swapchain_image_format;
     VkExtent2D vulkan_swapchain_extent;
 
+    VkPipeline vulkan_graphics_pipeline;
     VkPipelineLayout vulkan_pipeline_layout;
     VkRenderPass vulkan_render_pass;
 
@@ -160,6 +161,9 @@ private:
     }
 
     void cleanup() {
+
+        std::cout << "Destroying Vulkan Graphics Pipeline... \n\n";
+        vkDestroyPipeline(vulkan_logical_device, vulkan_graphics_pipeline, nullptr);
 
         std::cout << "Destroying Vulkan Pipeline Layout... \n\n";
         vkDestroyPipelineLayout(vulkan_logical_device, vulkan_pipeline_layout, nullptr);
@@ -357,7 +361,7 @@ private:
         vkEnumeratePhysicalDevices(vulkan_instance, &devices_count, nullptr);
 
         if (devices_count == 0) {
-            throw std::runtime_error("Failed to find Vulkan Physical devices (GPUs) with Vulkan support!");
+            throw std::runtime_error("Failed to find Vulkan Physical devices (GPUs) with Vulkan support! \n");
         }
 
         // Getting all physical devices
@@ -387,7 +391,7 @@ private:
         }
 
         if (vulkan_physical_device == VK_NULL_HANDLE) {
-            throw std::runtime_error("Failed to find a suitable Physical device (GPU)!");
+            throw std::runtime_error("Failed to find a suitable Physical device (GPU)! \n");
         }
 
         vkGetPhysicalDeviceMemoryProperties(vulkan_physical_device, &device_memory);
@@ -1017,7 +1021,7 @@ private:
             nullptr,
             &vulkan_render_pass) != VK_SUCCESS) {
 
-            throw std::runtime_error("Failed to create render pass! \n");
+            throw std::runtime_error("Failed to create Vulkan Render pass! \n");
         }
 
         std::cout << "Vulkan Render pass created. \n\n";
@@ -1025,15 +1029,17 @@ private:
 
     void create_graphics_pipeline() {
         
-        std::cout << "Creating the Vulkan Pipeline Layout... \n\n";
+        std::cout << "Creating the Vulkan Graphics Pipeline ... \n\n";
+
+        std::cout << "\t Creating the Vulkan Pipeline Layout... \n\n";
 
         auto vert_shader_bytecode = read_file("vert.spv");
         auto frag_shader_bytecode = read_file("frag.spv");
 
-        std::cout << "\t Vert shader file size: " << vert_shader_bytecode.size() << " bytes. \n";
-        std::cout << "\t Frag shader file size: " << frag_shader_bytecode.size() << " bytes. \n\n";
+        std::cout << "\t\t Vert shader file size: " << vert_shader_bytecode.size() << " bytes. \n";
+        std::cout << "\t\t Frag shader file size: " << frag_shader_bytecode.size() << " bytes. \n\n";
 
-        std::cout << "\t Creating the shader modules... \n";
+        std::cout << "\t\t Creating the shader modules... \n";
         VkShaderModule vert_shader_module = create_shader_module(vert_shader_bytecode);
         VkShaderModule frag_shader_module = create_shader_module(frag_shader_bytecode);
         
@@ -1044,11 +1050,11 @@ private:
             throw std::runtime_error("Frag shader not created! \n");
         }
         else {
-            std::cout << "\t Shader modules created. \n\n";
+            std::cout << "\t\t Shader modules created. \n\n";
         }
 
 
-        std::cout << "\t Creating the shader stages... \n";
+        std::cout << "\t\t Creating the shader stages... \n";
         // To actually use the shaders we will need to assign them to a specific
         // pipeline stage.
         VkPipelineShaderStageCreateInfo vert_shader_stage_info{};
@@ -1066,8 +1072,7 @@ private:
         VkPipelineShaderStageCreateInfo shader_stages[] = { 
             vert_shader_stage_info,
             frag_shader_stage_info };
-        std::cout << "\t Shader stages created.  \n\n";
-
+        std::cout << "\t\t Shader stages created.  \n\n";
 
         // While most of the pipeline state needs to be baked into the pipeline static state, a
         // limited amount of the state can actually be dynamic, changing it without recreating the
@@ -1158,7 +1163,7 @@ private:
         viewport_state_create_info.scissorCount = 1;
         // viewport_state_create_info.pScissors = &scissor;
 
-        std::cout << "\t Creating Vulkan Rasterizer... \n";
+        std::cout << "\t\t Creating Vulkan Rasterizer... \n";
         // The rasterizer takes the geometry that is shaped by the vertices from the
         // vertex shader and turns it into fragments to be colored by the fragment shader.
         VkPipelineRasterizationStateCreateInfo rasterizer_create_info{};
@@ -1179,7 +1184,7 @@ private:
         // and can be clockwise/counterclockwise.
         rasterizer_create_info.frontFace = VK_FRONT_FACE_CLOCKWISE;
         rasterizer_create_info.depthBiasEnable = VK_FALSE;
-        std::cout << "\t Vulkan Rasterizer created. \n\n";
+        std::cout << "\t\t Vulkan Rasterizer created. \n\n";
 
 
         // Multisampling is one of the ways to perform anti-aliasing. It works by combining
@@ -1205,11 +1210,11 @@ private:
         color_blend_attachment.blendEnable = VK_FALSE;
         
         // The second structure references the array of structures for all of the framebuffers
-        VkPipelineColorBlendStateCreateInfo color_blending{};
-        color_blending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-        color_blending.logicOpEnable = VK_FALSE;
-        color_blending.attachmentCount = 1;
-        color_blending.pAttachments = &color_blend_attachment;
+        VkPipelineColorBlendStateCreateInfo color_blending_create_info{};
+        color_blending_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        color_blending_create_info.logicOpEnable = VK_FALSE;
+        color_blending_create_info.attachmentCount = 1;
+        color_blending_create_info.pAttachments = &color_blend_attachment;
 
         // You can use uniform values in shaders, which are globals similar to dynamic
         // state variables that can be changed at drawing time to alter the behavior of
@@ -1229,11 +1234,44 @@ private:
             throw std::runtime_error("Failed to create Vulkan Pipeline Layout! \n");
         }
        
-        std::cout << "Vulkan Pipeline Layout created. \n\n";
+        std::cout << "\t Vulkan Pipeline Layout created. \n\n";
+
+        // We create the Graphics pipeline using all the previously built
+        // structs describing the fixed-function stage.
+        VkGraphicsPipelineCreateInfo graphics_pipeline_create_info{};
+        graphics_pipeline_create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        graphics_pipeline_create_info.stageCount = 2;
+        graphics_pipeline_create_info.pStages = shader_stages;
+        graphics_pipeline_create_info.pVertexInputState = &vertex_input_create_info;
+        graphics_pipeline_create_info.pInputAssemblyState = &input_assembly_create_info;
+        graphics_pipeline_create_info.pViewportState = &viewport_state_create_info;
+        graphics_pipeline_create_info.pRasterizationState = &rasterizer_create_info;
+        graphics_pipeline_create_info.pMultisampleState = &multisampling_create_info;
+        graphics_pipeline_create_info.pDepthStencilState = nullptr;
+        graphics_pipeline_create_info.pColorBlendState = &color_blending_create_info;
+        graphics_pipeline_create_info.pDynamicState = &dynamic_state_create_info;
+
+        graphics_pipeline_create_info.layout = vulkan_pipeline_layout;
+        graphics_pipeline_create_info.renderPass = vulkan_render_pass;
+        // index of the subpass where the graphics pipeline will be used
+        graphics_pipeline_create_info.subpass = 0;
+
+        if (vkCreateGraphicsPipelines(
+            vulkan_logical_device,
+            VK_NULL_HANDLE,
+            1,
+            &graphics_pipeline_create_info,
+            nullptr,
+            &vulkan_graphics_pipeline) != VK_SUCCESS) {
+            
+            throw std::runtime_error("Failed to create Vulkan Graphics Pipeline! \n");
+        }
+
+        std::cout << "Vulkan Graphics Pipeline created. \n\n";
 
         // We can destroy the shader modules as soon as the pipeline
         // is finished.
-        std::cout << "Destroying shader stages... \n\n";
+        std::cout << "\t\t Destroying shader modules... \n\n";
         vkDestroyShaderModule(vulkan_logical_device, vert_shader_module, nullptr);
         vkDestroyShaderModule(vulkan_logical_device, frag_shader_module, nullptr);
     }
