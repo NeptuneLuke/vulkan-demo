@@ -106,13 +106,14 @@ private:
 
     // Implicitly destroyed when vulkan_swapchain is destroyed
     std::vector<VkImage> vulkan_swapchain_images;
-    std::vector<VkImageView> vulkan_swapchain_images_views;
+    std::vector<VkImageView> vulkan_swapchain_image_views;
     VkFormat vulkan_swapchain_image_format;
     VkExtent2D vulkan_swapchain_extent;
 
     VkPipeline vulkan_graphics_pipeline;
     VkPipelineLayout vulkan_pipeline_layout;
     VkRenderPass vulkan_render_pass;
+    std::vector<VkFramebuffer> vulkan_swapchain_framebuffers;
 
     VkDebugUtilsMessengerEXT debug_messenger;
 
@@ -149,6 +150,8 @@ private:
         create_render_pass();
 
         create_graphics_pipeline();
+
+        create_framebuffers();
     }
 
     void main_loop() {
@@ -162,6 +165,13 @@ private:
 
     void cleanup() {
 
+        // Delete the framebuffers  before the image views and render pass they 
+        // are based on, but only after the rendering is finished.
+        std::cout << "Destroying Vulkan Swapchain framebuffers... \n\n";
+        for (auto framebuffer : vulkan_swapchain_framebuffers) {
+            vkDestroyFramebuffer(vulkan_logical_device, framebuffer, nullptr);
+        }
+
         std::cout << "Destroying Vulkan Graphics Pipeline... \n\n";
         vkDestroyPipeline(vulkan_logical_device, vulkan_graphics_pipeline, nullptr);
 
@@ -172,7 +182,7 @@ private:
         vkDestroyRenderPass(vulkan_logical_device, vulkan_render_pass, nullptr);
 
         std::cout << "Destroying Vulkan Image views... \n\n";
-        for (auto img_view : vulkan_swapchain_images_views) {
+        for (auto img_view : vulkan_swapchain_image_views) {
             vkDestroyImageView(vulkan_logical_device, img_view, nullptr);
         }
 
@@ -908,7 +918,7 @@ private:
         std::cout << "Creating Vulkan Image views for Vulkan Swapchain images... \n";
 
         // Resize to fit all the image views we will create
-        vulkan_swapchain_images_views.resize(vulkan_swapchain_images.size());
+        vulkan_swapchain_image_views.resize(vulkan_swapchain_images.size());
 
         // Create an image view for every image
         for (size_t i = 0; i < vulkan_swapchain_images.size(); i++) {
@@ -942,7 +952,7 @@ private:
                 vulkan_logical_device,
                 &image_view_create_info,
                 nullptr,
-                &vulkan_swapchain_images_views[i]) != VK_SUCCESS) {
+                &vulkan_swapchain_image_views[i]) != VK_SUCCESS) {
             
                 throw std::runtime_error("Failed to create Vulkan Image views for the Vulkan Swapchain images! \n");
             }
@@ -1178,7 +1188,7 @@ private:
         // Fill the area of the polygon with fragments.
         rasterizer_create_info.polygonMode = VK_POLYGON_MODE_FILL;
         rasterizer_create_info.lineWidth = 1.0f; // thickness of line in terms of number of fragments
-        rasterizer_create_info.cullMode = VK_CULL_MODE_BACK_BIT;
+        rasterizer_create_info.cullMode = VK_CULL_MODE_BACK_BIT; // enables back-face culling
 
         // Specifies the vertex order for faces to be considered front-facing
         // and can be clockwise/counterclockwise.
@@ -1205,10 +1215,12 @@ private:
         // We only have one framebuffer.
         VkPipelineColorBlendAttachmentState color_blend_attachment{};
         color_blend_attachment.colorWriteMask = 
-            VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
+            VK_COLOR_COMPONENT_R_BIT |
+            VK_COLOR_COMPONENT_G_BIT |
+            VK_COLOR_COMPONENT_B_BIT |
             VK_COLOR_COMPONENT_A_BIT;
         color_blend_attachment.blendEnable = VK_FALSE;
-        
+
         // The second structure references the array of structures for all of the framebuffers
         VkPipelineColorBlendStateCreateInfo color_blending_create_info{};
         color_blending_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -1291,13 +1303,50 @@ private:
 
         VkShaderModule shader_module;
 
-        if (vkCreateShaderModule(vulkan_logical_device, &shader_module_create_info, nullptr,
+        if (vkCreateShaderModule(
+            vulkan_logical_device,
+            &shader_module_create_info,
+            nullptr,
             &shader_module) != VK_SUCCESS) {
             
             throw std::runtime_error("Failed to create the shader module! \n");
         }
 
         return shader_module;
+    }
+
+    void create_framebuffers() {
+        
+        std::cout << "Creating Vulkan Swapchain framebuffers... \n\n";
+
+        vulkan_swapchain_framebuffers.resize(vulkan_swapchain_image_views.size());
+
+        for (size_t i = 0; i < vulkan_swapchain_image_views.size(); i++) {
+        
+            VkImageView attachments[] = { vulkan_swapchain_image_views[i] };
+
+            // You can only use a framebuffer with the render passes that it is compatible
+            // with, so they roughly use the same number and type of attachments.
+            VkFramebufferCreateInfo framebuffer_create_info{};
+            framebuffer_create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+            framebuffer_create_info.renderPass = vulkan_render_pass;
+            framebuffer_create_info.attachmentCount = 1;
+            framebuffer_create_info.pAttachments = attachments;
+            framebuffer_create_info.width = vulkan_swapchain_extent.width;
+            framebuffer_create_info.height = vulkan_swapchain_extent.height;
+            framebuffer_create_info.layers = 1; // number of layers in image arrays
+            
+            if (vkCreateFramebuffer(
+                    vulkan_logical_device,
+                    &framebuffer_create_info,
+                    nullptr,
+                    &vulkan_swapchain_framebuffers[i]) != VK_SUCCESS) {
+
+                throw std::runtime_error("Failed to create Vulkan Swapchain framebuffers! \n");
+            }
+        }
+
+        std::cout << "Vulkan Swapchain framebuffers created. \n\n";
     }
 
     static std::vector<char> read_file(const std::string& file_name) {
