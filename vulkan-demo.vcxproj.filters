@@ -33,9 +33,6 @@
     <ClCompile Include="vk_swapchain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="vk_renderpass.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="vk_graphics_pipeline.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -65,9 +62,6 @@
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="vk_swapchain.hpp">
-      <Filter>Source Files</Filter>
-    </ClInclude>
-    <ClInclude Include="vk_renderpass.hpp">
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="vk_graphics_pipeline.hpp">
