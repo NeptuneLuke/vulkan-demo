@@ -136,11 +136,27 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="my_utils.cpp" />
+    <ClCompile Include="vk_debugger.cpp" />
+    <ClCompile Include="vk_core.cpp" />
+    <ClCompile Include="vk_queue_family.cpp" />
+    <ClCompile Include="vk_renderpass.cpp" />
+    <ClCompile Include="vk_swapchain.cpp" />
+    <ClCompile Include="vk_graphics_pipeline.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="compile-shader.bat" />
     <None Include="shader.frag" />
     <None Include="shader.vert" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="my_utils.hpp" />
+    <ClInclude Include="vk_core.hpp" />
+    <ClInclude Include="vk_debugger.hpp" />
+    <ClInclude Include="vk_queue_family.hpp" />
+    <ClInclude Include="vk_renderpass.hpp" />
+    <ClInclude Include="vk_swapchain.hpp" />
+    <ClInclude Include="vk_graphics_pipeline.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

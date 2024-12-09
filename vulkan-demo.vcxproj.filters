@@ -18,6 +18,27 @@
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="vk_debugger.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="my_utils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="vk_core.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="vk_queue_family.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="vk_swapchain.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="vk_renderpass.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="vk_graphics_pipeline.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="shader.vert">
@@ -29,5 +50,28 @@
     <None Include="compile-shader.bat">
       <Filter>Source Files</Filter>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="vk_debugger.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="my_utils.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vk_core.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vk_queue_family.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vk_swapchain.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vk_renderpass.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vk_graphics_pipeline.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
