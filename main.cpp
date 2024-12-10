@@ -60,6 +60,7 @@ private:
     VkRenderPass vulkan_render_pass;
     std::vector<VkFramebuffer> vulkan_swapchain_framebuffers;
     VkCommandPool vulkan_command_pool;
+    VkCommandBuffer vulkan_command_buffer; // Implicitly destroyed when vulkan_command_buffer is destroyed
 
     VkDebugUtilsMessengerEXT vulkan_debugger_messenger;
 
@@ -120,6 +121,16 @@ private:
             vulkan_command_pool,
             vulkan_surface,
             vulkan_physical_device, vulkan_logical_device);
+
+        create_command_buffer(
+            vulkan_command_buffer,
+            vulkan_command_pool,
+            vulkan_logical_device);
+    }
+
+    void draw_frame() {
+        
+
     }
 
     void main_loop() {
@@ -128,6 +139,8 @@ private:
         while (!glfwWindowShouldClose(window)) {
 
             glfwPollEvents(); // Check for events
+
+            draw_frame();
         }
     }
 

@@ -24,7 +24,17 @@ void create_framebuffers(
     VkRenderPass vk_render_pass,
     std::vector<VkImageView> vk_swapchain_image_views, VkExtent2D vk_swapchain_extent);
 
+
 void create_command_pool(
     VkCommandPool& vk_command_pool,
     VkSurfaceKHR vk_surface,
     VkPhysicalDevice vk_phys_device, VkDevice vk_logic_device);
+
+
+void create_command_buffer(
+    VkCommandBuffer& vk_command_buffer,
+    VkCommandPool vk_command_pool,
+    VkDevice vk_logic_device);
+
+
+void record_command_buffer();

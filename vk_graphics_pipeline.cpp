@@ -433,3 +433,106 @@ void create_command_pool(
 
     std::cout << "Vulkan Command pool created. \n\n";
 }
+
+
+void create_command_buffer(
+    VkCommandBuffer& vk_command_buffer,
+    VkCommandPool vk_command_pool,
+    VkDevice vk_logic_device) {
+    
+    std::cout << "Creating Vulkan Command buffer(s)... \n\n";
+
+    VkCommandBufferAllocateInfo command_buffer_allocate_info{};
+    command_buffer_allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    command_buffer_allocate_info.commandPool = vk_command_pool;
+    command_buffer_allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    command_buffer_allocate_info.commandBufferCount = 1; // we only use 1 command buffer
+
+    if (vkAllocateCommandBuffers(
+            vk_logic_device,
+            &command_buffer_allocate_info,
+            &vk_command_buffer) != VK_SUCCESS) {
+    
+        throw std::runtime_error("Failed to allocate Vulkan Command buffer(s)! \n");
+    }
+
+    std::cout << "Vulkan Command buffer(s) created. \n\n";
+}
+
+
+
+void record_command_buffer(
+    VkCommandBuffer vk_command_buffer,
+    VkPipeline vk_graphics_pipeline,
+    VkExtent2D vk_swapchain_extent,
+    VkRenderPass vk_render_pass,
+    std::vector<VkFramebuffer> vk_swapchain_framebuffers,
+    uint32_t swapchain_image_index) {
+
+    std::cout << "Begin recording command buffer(s). \n\n";
+
+    VkCommandBufferBeginInfo command_buffer_begin_info{};
+    command_buffer_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+    if (vkBeginCommandBuffer(vk_command_buffer, &command_buffer_begin_info) != VK_SUCCESS) {
+       
+        throw std::runtime_error("Failed to begin recording command buffer(s)! \n");
+    }
+
+    VkRenderPassBeginInfo render_pass_begin_info{};
+    render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    render_pass_begin_info.renderPass = vk_render_pass;
+    render_pass_begin_info.framebuffer = vk_swapchain_framebuffers[swapchain_image_index];
+    render_pass_begin_info.renderArea.offset = {0, 0};
+    render_pass_begin_info.renderArea.extent = vk_swapchain_extent;
+
+    VkClearValue clear_color = { { {1.0f, 1.0f, 1.0f, 1.0f} } };
+    render_pass_begin_info.clearValueCount = 1;
+    render_pass_begin_info.pClearValues = &clear_color;
+
+    vkCmdBeginRenderPass(vk_command_buffer, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+
+    vkCmdBindPipeline(vk_command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk_graphics_pipeline);
+
+    // A viewport describes the region of the framebuffer that the output
+   // will be rendered to. This will almost always be (0, 0) to (width, height)
+   // and in this tutorial will also be the case.
+   // Remember that the size of the swapchain and its images may differ from the WIDTH
+   // and HEIGHT of the window. The swapchain images will be used as framebuffers later on,
+   // so we should stick to their size.
+   // The minDepth and maxDepth values specify the range of depth values to use
+   // the framebuffer.These values must be within the[0.0f, 1.0f] range, but
+   // minDepth may be higher than maxDepth.If you aren’t doing anything special,
+   // then you should stick to the standard values of 0.0f and 1.0f.
+    VkViewport viewport{};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = (float)vk_swapchain_extent.width;
+    viewport.height = (float)vk_swapchain_extent.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    vkCmdSetViewport(vk_command_buffer, 0, 1, &viewport);
+
+    // While viewports define the transformation from the image to the framebuffer,
+    // scissor rectangles define in which regions pixels will actually be stored.
+    // Any pixels outside the scissor rectangles will be discarded by the rasterizer.
+    // They function like a filter rather than a transformation.
+    // If we want to draw to the entire framebuffer we should specify a scissor
+    // rectangle that covers it entirely.
+    VkRect2D scissor{};
+    scissor.offset = { 0, 0 };
+    scissor.extent = vk_swapchain_extent;
+    vkCmdSetScissor(vk_command_buffer, 0, 1, &scissor);
+
+    // Draw command for the triangle!
+    vkCmdDraw(vk_command_buffer, 3, 1, 0, 0);
+
+    vkCmdEndRenderPass(vk_command_buffer);
+
+    if (vkEndCommandBuffer(vk_command_buffer) != VK_SUCCESS) {
+        
+        throw std::runtime_error("Failed to record command buffer(s)! \n");
+    }
+
+    std::cout << "Finished recording command buffer(s). \n\n";
+}
