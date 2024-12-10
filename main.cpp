@@ -59,6 +59,7 @@ private:
     VkPipelineLayout vulkan_pipeline_layout;
     VkRenderPass vulkan_render_pass;
     std::vector<VkFramebuffer> vulkan_swapchain_framebuffers;
+    VkCommandPool vulkan_command_pool;
 
     VkDebugUtilsMessengerEXT vulkan_debugger_messenger;
 
@@ -114,6 +115,11 @@ private:
             vulkan_logical_device,
             vulkan_render_pass,
             vulkan_swapchain_image_views, vulkan_swapchain_extent);
+
+        create_command_pool(
+            vulkan_command_pool,
+            vulkan_surface,
+            vulkan_physical_device, vulkan_logical_device);
     }
 
     void main_loop() {
@@ -128,6 +134,9 @@ private:
     void cleanup() {
 
         // Destroy objects in opposite order of creation.
+
+        std::cout << "Destroying Vulkan Command pool... \n\n";
+        vkDestroyCommandPool(vulkan_logical_device, vulkan_command_pool, nullptr);
 
         // Delete the framebuffers  before the image views and render pass they 
         // are based on, but only after the rendering is finished.

@@ -1,4 +1,5 @@
 #include "vk_graphics_pipeline.hpp"
+#include "vk_queue_family.hpp"
 
 
 void create_graphics_pipeline(
@@ -397,4 +398,38 @@ void create_framebuffers(
     }
 
     std::cout << "Vulkan Swapchain framebuffers created. \n\n";
+}
+
+
+void create_command_pool(
+    VkCommandPool& vk_command_pool,
+    VkSurfaceKHR vk_surface,
+    VkPhysicalDevice vk_phys_device, VkDevice vk_logic_device) {
+    
+    std::cout << "Creating Vulkan Command pool... \n\n";
+
+    QueueFamilyIndices queue_family_indices = find_queue_families(vk_surface, vk_phys_device);
+    
+    // Because we record a command buffer every frame, we want to be able to reset and
+    // rerecord over it. Thus we need to set the flag to VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+    // which makes rerecording command buffers individual.
+    // Command buffers are executed by submitting them on one of the device queues,
+    // such as graphics and presentation queues. Each command pool can only allocate command 
+    // buffers that are submitted on a single type of queue.
+    // We are going to record command for drawing, which is why we have chosen the graphics queue family.
+    VkCommandPoolCreateInfo command_pool_create_info{};
+    command_pool_create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    command_pool_create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    command_pool_create_info.queueFamilyIndex = queue_family_indices.graphics_family.value();
+
+    if (vkCreateCommandPool(
+        vk_logic_device,
+        &command_pool_create_info,
+        nullptr,
+        &vk_command_pool) != VK_SUCCESS) {
+        
+        throw std::runtime_error("Failed to create Vulkan Command pool! \n");
+    }
+
+    std::cout << "Vulkan Command pool created. \n\n";
 }
